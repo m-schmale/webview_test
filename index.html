@@ -1,132 +1,222 @@
-<script>
-  const feedback = document.getElementById("feedback");
-  const log = (msg, level = "info") => {
-    const time = new Date().toISOString();
-    const line = document.createElement("div");
-    line.className = "log-line " + level;
-    line.textContent = `[${time}] ${msg}`;
-    feedback.appendChild(line);
-    feedback.scrollTop = feedback.scrollHeight;
-  };
-
-  // Receive messages from the Service Worker (e.g., fetch intercept logs)
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      log("SW -> " + JSON.stringify(event.data), "info");
-    });
-  } else {
-    log("Service workers not supported in this environment", "error");
-  }
-
-  document.getElementById("btnRegister").addEventListener("click", async () => {
-    if (!("serviceWorker" in navigator)) return;
-    try {
-      const reg = await navigator.serviceWorker.register("./sw.js", {
-        scope: "./",
-      });
-      log("Registering service worker…", "info");
-
-      reg.addEventListener("updatefound", () => {
-        log("SW update found (installing)…", "info");
-        const installing = reg.installing;
-        if (installing) {
-          installing.addEventListener("statechange", () => {
-            log(
-              "SW state: " + installing.state,
-              installing.state === "activated" ? "success" : "info"
-            );
-          });
-        }
-      });
-
-      const ready = await navigator.serviceWorker.ready;
-      log("Service worker ready and controlling: " + !!ready.active, "success");
-      if (!navigator.serviceWorker.controller) {
-        log("Reload page for SW to take control.", "warn");
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Service Worker Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
       }
-    } catch (e) {
-      log("Register error: " + (e && e.message ? e.message : e), "error");
-    }
-  });
-
-  document
-    .getElementById("btnUnregister")
-    .addEventListener("click", async () => {
-      if (!("serviceWorker" in navigator)) return;
-      const regs = await navigator.serviceWorker.getRegistrations();
-      if (!regs.length) {
-        log("No SW registrations to unregister", "warn");
-        return;
+      .controls {
+        margin-bottom: 20px;
       }
-      await Promise.all(regs.map((r) => r.unregister()));
-      log("Unregistered all service workers for this scope", "success");
-    });
-
-  document.getElementById("btnState").addEventListener("click", async () => {
-    if (!("serviceWorker" in navigator)) return;
-    const reg = await navigator.serviceWorker.getRegistration("./");
-    const state = {
-      hasController: !!navigator.serviceWorker.controller,
-      installing: !!(reg && reg.installing),
-      waiting: !!(reg && reg.waiting),
-      active: !!(reg && reg.active),
-      scope: reg ? reg.scope : null,
-    };
-    log("SW state: " + JSON.stringify(state), "info");
-  });
-
-  document
-    .getElementById("btnIntercept")
-    .addEventListener("click", async () => {
-      try {
-        // Request that the SW intercepts (it will reply with synthetic JSON)
-        const url = "./intercept-test?ts=" + Date.now();
-        const res = await fetch(url, { cache: "no-store" });
-        const text = await res.text();
-        log("Intercept fetch response: " + text, res.ok ? "success" : "warn");
-      } catch (e) {
-        log(
-          "Intercept fetch error: " + (e && e.message ? e.message : e),
-          "error"
-        );
+      button {
+        margin: 5px;
+        padding: 10px 15px;
+        background-color: #007cba;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
       }
-    });
+      button:hover {
+        background-color: #005a85;
+      }
+      #feedback {
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        height: 300px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .log-line {
+        margin: 2px 0;
+        padding: 2px;
+      }
+      .log-line.success {
+        color: #008000;
+      }
+      .log-line.error {
+        color: #cc0000;
+      }
+      .log-line.warn {
+        color: #ff8800;
+      }
+      .log-line.info {
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Service Worker Test</h1>
 
-  document.getElementById("btnCache").addEventListener("click", async () => {
-    if (!("caches" in window)) {
-      log("Cache API not available", "error");
-      return;
-    }
-    try {
-      const cacheName = "page-cache";
-      const c = await caches.open(cacheName);
-      const key = "./cache-test-" + Date.now();
-      const val = "hello-from-page-" + Date.now();
-      await c.put(
-        key,
-        new Response(val, { headers: { "Content-Type": "text/plain" } })
-      );
-      const match = await c.match(key);
-      const result = match ? await match.text() : null;
-      if (result === val) {
-        log("Cache API put/get OK: " + JSON.stringify(result), "success");
+    <div class="controls">
+      <button id="btnRegister">Register SW</button>
+      <button id="btnUnregister">Unregister SW</button>
+      <button id="btnState">Check SW State</button>
+      <button id="btnIntercept">Test Intercept</button>
+      <button id="btnCache">Test Cache</button>
+      <button id="btnClearCaches">Clear Caches</button>
+    </div>
+
+    <div id="feedback"></div>
+
+    <script>
+      const feedback = document.getElementById("feedback");
+      const log = (msg, level = "info") => {
+        const time = new Date().toISOString();
+        const line = document.createElement("div");
+        line.className = "log-line " + level;
+        line.textContent = `[${time}] ${msg}`;
+        feedback.appendChild(line);
+        feedback.scrollTop = feedback.scrollHeight;
+      };
+
+      // Receive messages from the Service Worker (e.g., fetch intercept logs)
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.addEventListener("message", (event) => {
+          log("SW -> " + JSON.stringify(event.data), "info");
+        });
       } else {
-        log("Cache API mismatch: " + JSON.stringify(result), "warn");
+        log("Service workers not supported in this environment", "error");
       }
-    } catch (e) {
-      log("Cache API error: " + (e && e.message ? e.message : e), "error");
-    }
-  });
 
-  document
-    .getElementById("btnClearCaches")
-    .addEventListener("click", async () => {
-      try {
-        const names = await caches.keys();
-        await Promise.all(names.map((n) => caches.delete(n)));
-        log("All caches cleared: " + JSON.stringify(names), "success");
-      } catch (e) {
-        log("Clear caches error: " + (e && e.message ? e.message : e), "error");
-      }
-    });
-</script>
+      document
+        .getElementById("btnRegister")
+        .addEventListener("click", async () => {
+          if (!("serviceWorker" in navigator)) return;
+          try {
+            const reg = await navigator.serviceWorker.register("./sw.js", {
+              scope: "./",
+            });
+            log("Registering service worker…", "info");
+
+            reg.addEventListener("updatefound", () => {
+              log("SW update found (installing)…", "info");
+              const installing = reg.installing;
+              if (installing) {
+                installing.addEventListener("statechange", () => {
+                  log(
+                    "SW state: " + installing.state,
+                    installing.state === "activated" ? "success" : "info"
+                  );
+                });
+              }
+            });
+
+            const ready = await navigator.serviceWorker.ready;
+            log(
+              "Service worker ready and controlling: " + !!ready.active,
+              "success"
+            );
+            if (!navigator.serviceWorker.controller) {
+              log("Reload page for SW to take control.", "warn");
+            }
+          } catch (e) {
+            log("Register error: " + (e && e.message ? e.message : e), "error");
+          }
+        });
+
+      document
+        .getElementById("btnUnregister")
+        .addEventListener("click", async () => {
+          if (!("serviceWorker" in navigator)) return;
+          const regs = await navigator.serviceWorker.getRegistrations();
+          if (!regs.length) {
+            log("No SW registrations to unregister", "warn");
+            return;
+          }
+          await Promise.all(regs.map((r) => r.unregister()));
+          log("Unregistered all service workers for this scope", "success");
+        });
+
+      document
+        .getElementById("btnState")
+        .addEventListener("click", async () => {
+          if (!("serviceWorker" in navigator)) return;
+          const reg = await navigator.serviceWorker.getRegistration("./");
+          const state = {
+            hasController: !!navigator.serviceWorker.controller,
+            installing: !!(reg && reg.installing),
+            waiting: !!(reg && reg.waiting),
+            active: !!(reg && reg.active),
+            scope: reg ? reg.scope : null,
+          };
+          log("SW state: " + JSON.stringify(state), "info");
+        });
+
+      document
+        .getElementById("btnIntercept")
+        .addEventListener("click", async () => {
+          try {
+            // Request that the SW intercepts (it will reply with synthetic JSON)
+            const url = "./intercept-test?ts=" + Date.now();
+            const res = await fetch(url, { cache: "no-store" });
+            const text = await res.text();
+            log(
+              "Intercept fetch response: " + text,
+              res.ok ? "success" : "warn"
+            );
+          } catch (e) {
+            log(
+              "Intercept fetch error: " + (e && e.message ? e.message : e),
+              "error"
+            );
+          }
+        });
+
+      document
+        .getElementById("btnCache")
+        .addEventListener("click", async () => {
+          if (!("caches" in window)) {
+            log("Cache API not available", "error");
+            return;
+          }
+          try {
+            const cacheName = "page-cache";
+            const c = await caches.open(cacheName);
+            const key = "./cache-test-" + Date.now();
+            const val = "hello-from-page-" + Date.now();
+            await c.put(
+              key,
+              new Response(val, { headers: { "Content-Type": "text/plain" } })
+            );
+            const match = await c.match(key);
+            const result = match ? await match.text() : null;
+            if (result === val) {
+              log("Cache API put/get OK: " + JSON.stringify(result), "success");
+            } else {
+              log("Cache API mismatch: " + JSON.stringify(result), "warn");
+            }
+          } catch (e) {
+            log(
+              "Cache API error: " + (e && e.message ? e.message : e),
+              "error"
+            );
+          }
+        });
+
+      document
+        .getElementById("btnClearCaches")
+        .addEventListener("click", async () => {
+          try {
+            const names = await caches.keys();
+            await Promise.all(names.map((n) => caches.delete(n)));
+            log("All caches cleared: " + JSON.stringify(names), "success");
+          } catch (e) {
+            log(
+              "Clear caches error: " + (e && e.message ? e.message : e),
+              "error"
+            );
+          }
+        });
+    </script>
+  </body>
+</html>
