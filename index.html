@@ -59,6 +59,7 @@
 
     <div class="controls">
       <button id="btnRegister">Register SW</button>
+      <button id="btnReload">Reload Page</button>
       <button id="btnUnregister">Unregister SW</button>
       <button id="btnState">Check SW State</button>
       <button id="btnIntercept">Test Intercept</button>
@@ -123,6 +124,11 @@
             log("Register error: " + (e && e.message ? e.message : e), "error");
           }
         });
+
+      document.getElementById("btnReload").addEventListener("click", () => {
+        log("Reloading page to allow SW to take control...", "info");
+        window.location.reload();
+      });
 
       document
         .getElementById("btnUnregister")
