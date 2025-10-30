@@ -71,6 +71,36 @@
 
     <script>
       (function () {
+        // Diagnostic fetch for sw.js
+        (function diagnosticFetchSW() {
+          var url = "./sw.js";
+          fetch(url, { cache: "no-store" })
+            .then(function (res) {
+              var ct = res.headers.get("content-type");
+              var status = res.status;
+              return res.text().then(function (txt) {
+                var preview = txt.slice(0, 100).replace(/\n/g, "\\n");
+                log(
+                  "Diagnostic: sw.js status=" +
+                    status +
+                    ", content-type=" +
+                    ct +
+                    ", first 100 bytes: " +
+                    preview,
+                  status === 200 && ct && ct.indexOf("javascript") !== -1
+                    ? "success"
+                    : "error"
+                );
+              });
+            })
+            .catch(function (e) {
+              log(
+                "Diagnostic: sw.js fetch error: " +
+                  (e && e.message ? e.message : e),
+                "error"
+              );
+            });
+        })();
         var feedback = document.getElementById("feedback");
         function log(msg, level) {
           level = level || "info";
